@@ -10,6 +10,10 @@ import InlineMessage from "./components/ui/InlineMessage";
 import ToastRegion from "./components/ui/ToastRegion";
 import Button from "./components/ui/Button";
 import IconButton from "./components/ui/IconButton";
+import PanelResizer from "./components/ui/PanelResizer";
+import WeatherDashboard from "./components/Weather/WeatherDashboard";
+import TourOverlay from "./components/Tour/TourOverlay";
+import { buildTourSteps } from "./components/Tour/tourSteps.jsx";
 import { X } from "lucide-react";
 
 // The 3D view pulls in three.js, so it is only loaded when it is opened.
@@ -30,15 +34,44 @@ import { CRISM_OVERLAY_URL, getScienceTargets } from "./api/science";
 import { estimateConsumables } from "./api/mission";
 import { getHeightmap } from "./api/terrain";
 import { getHealth, probeImage } from "./api/system";
+import { MAX_HORIZON_HOURS, getCurrentWeather, getForecast, getWeatherStatus } from "./api/weather";
+import { createMissionClock, splitClock } from "./utils/missionClock";
+import { selectHourBucket, useClockValue } from "./hooks/useMissionClock";
 import { isServiceFailure } from "./api/client";
 
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/layout.css";
+import "./styles/weather.css";
 
 const EMPTY_DRAFT = { pointType: "start", x: "", y: "" };
 const DEFAULT_EVA_INPUTS = { payloadKg: 15, averageSlopePercent: 5 };
+const DEFAULT_HORIZON = { start: 0, end: 48 };
+const PANEL_MIN = 260;
+const PANEL_MAX = 680;
+const MAP_MIN = 420;
+const TOUR_KEY = "mw.tour.v1.done";
+
+function validHorizon(value) {
+  if (!value || typeof value !== "object") return null;
+  const { start, end } = value;
+  return Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end <= 168 && start < end ? { start, end } : null;
+}
+
+function validWidths(value) {
+  if (!value || typeof value !== "object") return null;
+  const ok = (w) => w === null || (typeof w === "number" && w >= PANEL_MIN && w <= PANEL_MAX);
+  return ok(value.left ?? null) && ok(value.right ?? null) ? { left: value.left ?? null, right: value.right ?? null } : null;
+}
+
+function tourDone() {
+  try {
+    return window.localStorage.getItem(TOUR_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
 
 function validLayerState(value) {
   if (!value || typeof value !== "object") return null;
@@ -116,6 +149,37 @@ function App() {
   const [evaLoading, setEvaLoading] = useState(false);
   const [evaError, setEvaError] = useState(null);
   const [evaInputs, setEvaInputs] = useState(DEFAULT_EVA_INPUTS);
+
+  /* ---------------------------------------------------------------- weather */
+  const [weatherStatus, setWeatherStatus] = useState(null);
+  const [current, setCurrent] = useState({ data: null, loading: true, error: null });
+  const [forecastState, setForecastState] = useState({ forecast: null, loading: true, error: null });
+  const [horizon, setHorizon] = useSessionState("mw.weather.horizon", DEFAULT_HORIZON, validHorizon);
+  const [limits, setLimits] = useState(null);
+  const [nowForecast, setNowForecast] = useState({ hour: null, loading: true });
+
+  // The mission clock is the "now" of the weather panels. It ticks outside React
+  // state: the app only re-renders when the simulated hour changes.
+  const clock = useMemo(() => createMissionClock(), []);
+  useEffect(() => {
+    clock.resume();
+    return () => clock.suspend();
+  }, [clock]);
+  const hourBucket = useClockValue(clock, selectHourBucket);
+  const [weatherReload, setWeatherReload] = useState(0);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+
+  /* ---------------------------------------------------------------- panel widths and tour */
+  const [panelWidths, setPanelWidths] = useSessionState("mw.panels", { left: null, right: null }, validWidths);
+  const [resizing, setResizing] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const [tourOpen, setTourOpen] = useState(false);
 
   const setLayerAvailability = useCallback((id, status) => {
     setAvailability((current) => (current[id] === status ? current : { ...current, [id]: status }));
@@ -209,7 +273,89 @@ function App() {
     };
   }, [setLayerAvailability]);
 
-  /* ================================================================ derived state */
+  // Weather model status (issue-sol range and default planning limits).
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    getWeatherStatus({ signal: controller.signal })
+      .then((status) => {
+        if (!active) return;
+        setWeatherStatus(status);
+        if (status.available && status.default_limits) {
+          setLimits((currentLimits) => currentLimits ?? { ...status.default_limits });
+        } else if (!status.available) {
+          const message = status.message || "The weather model is not available.";
+          setCurrent({ data: null, loading: false, error: message });
+          setForecastState({ forecast: null, loading: false, error: message });
+        }
+      })
+      .catch((error) => {
+        if (!active || error.kind === "aborted") return;
+        const message = isServiceFailure(error) ? "The weather service could not be reached." : error.message;
+        setCurrent({ data: null, loading: false, error: message });
+        setForecastState({ forecast: null, loading: false, error: message });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [weatherReload]);
+
+  /* Mission clock -> what "now" means for the weather.
+     The forecast is issued at the end of the sol before the clock's sol, but never
+     later than the last measured sol: after that the clock runs on estimates. */
+  const latestSol = weatherStatus?.latest_issue_sol ?? null;
+  const firstClockSol = weatherStatus?.available ? weatherStatus.first_issue_sol + 1 : null;
+  useEffect(() => {
+    if (latestSol != null) clock.init(latestSol);
+  }, [clock, latestSol]);
+  const clockReady = hourBucket != null && latestSol != null;
+  const { sol: clockSol, hourInt: clockHour } = clockReady ? splitClock(hourBucket) : { sol: null, hourInt: null };
+  const issueSol = clockReady ? Math.min(latestSol, clockSol - 1) : null;
+  const issueSolParam = issueSol != null && issueSol < latestSol ? issueSol : null; // null = latest
+  const nowOffset = clockReady ? (clockSol - issueSol - 1) * 24 + clockHour : null; // hours since 00:00 of the first forecast sol
+  const measured = clockReady && clockSol <= latestSol;
+  const beyondReach = clockReady && nowOffset >= MAX_HORIZON_HOURS;
+
+  // Measured conditions at the clock time (up to the clock hour, nothing later), or the last measured sol once the clock is past the data.
+  useEffect(() => {
+    if (!weatherStatus?.available || !clockReady) return undefined;
+    let active = true;
+    const controller = new AbortController();
+    setCurrent((state) => ({ ...state, loading: true, error: null }));
+    getCurrentWeather(measured ? clockSol : latestSol, { hour: measured ? clockHour : null, signal: controller.signal })
+      .then((data) => active && setCurrent({ data, loading: false, error: null }))
+      .catch((error) => {
+        if (!active || error.kind === "aborted") return;
+        setCurrent({ data: null, loading: false, error: error.message });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [weatherStatus, clockReady, measured, clockSol, clockHour, latestSol]);
+
+  // The forecast for the clock hour itself: model estimate and EVA status "now".
+  useEffect(() => {
+    if (!weatherStatus?.available || !limits || !clockReady) return undefined;
+    if (beyondReach) {
+      setNowForecast({ hour: null, loading: false });
+      return undefined;
+    }
+    let active = true;
+    const controller = new AbortController();
+    setNowForecast((state) => ({ ...state, loading: true }));
+    getForecast({ issueSol: issueSolParam, startHour: nowOffset, endHour: nowOffset + 1, limits }, { signal: controller.signal })
+      .then((forecast) => active && setNowForecast({ hour: forecast.hours[0] ?? null, loading: false }))
+      .catch((error) => {
+        if (!active || error.kind === "aborted") return;
+        setNowForecast({ hour: null, loading: false });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [weatherStatus, limits, clockReady, beyondReach, issueSolParam, nowOffset, weatherReload]);
 
   const currentFingerprint = useMemo(
     () => routeFingerprint({ start: startPoint, goal: goalPoint, strategyId }),
@@ -233,6 +379,51 @@ function App() {
     () => analyzeScienceAlongRoute(routeResult, scienceTargets),
     [routeResult, scienceTargets]
   );
+
+  // The EVA duration estimated for the current route decides which GO windows are long enough.
+  const routeHours =
+    routeStatus === ROUTE_STATUS.CALCULATED && Number.isFinite(eva?.estimated_duration_hours) && eva.estimated_duration_hours > 0
+      ? eva.estimated_duration_hours
+      : null;
+  const weatherRoute = useMemo(() => {
+    if (!routeResult) return { state: "none", hours: null };
+    if (routeStatus === ROUTE_STATUS.OUTDATED) return { state: "stale", hours: null };
+    if (evaLoading) return { state: "pending", hours: null };
+    if (routeHours == null) return { state: "none", hours: null };
+    return { state: "current", hours: routeHours };
+  }, [routeResult, routeStatus, evaLoading, routeHours]);
+
+  // Forecast for the chosen range (counted from now), limits and route duration.
+  useEffect(() => {
+    if (!weatherStatus?.available || !limits || !clockReady) return undefined;
+    const startHour = nowOffset + horizon.start;
+    const endHour = Math.min(MAX_HORIZON_HOURS, nowOffset + horizon.end);
+    if (startHour >= MAX_HORIZON_HOURS || endHour <= startHour) {
+      setForecastState({
+        forecast: null,
+        loading: false,
+        error: `The model forecasts up to 7 sols after Sol ${issueSol}. The clock is past that: add newer MEDA data to look further.`,
+      });
+      return undefined;
+    }
+    let active = true;
+    const controller = new AbortController();
+    setForecastState((state) => ({ ...state, loading: true, error: null }));
+    const timer = setTimeout(() => {
+      getForecast({ issueSol: issueSolParam, startHour, endHour, routeHours, limits }, { signal: controller.signal })
+        .then((forecast) => active && setForecastState({ forecast, loading: false, error: null }))
+        .catch((error) => {
+          if (!active || error.kind === "aborted") return;
+          console.error("[weather] forecast unavailable:", error);
+          setForecastState({ forecast: null, loading: false, error: isServiceFailure(error) ? "The weather service could not be reached." : error.message });
+        });
+    }, 120);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [weatherStatus, clockReady, issueSol, issueSolParam, nowOffset, horizon, routeHours, limits, weatherReload]);
 
   /* ================================================================ actions */
 
@@ -440,6 +631,55 @@ function App() {
     push("info", "Route configuration cleared.");
   }, [push]);
 
+  const handleHorizonChange = useCallback(
+    (next) => setHorizon((currentHorizon) => (currentHorizon.start === next.start && currentHorizon.end === next.end ? currentHorizon : { start: next.start, end: next.end })),
+    [setHorizon]
+  );
+
+  const clampWidth = useCallback(
+    (side, value) => {
+      const other = side === "left" ? (rightOpen ? document.getElementById("mw-panel-right")?.getBoundingClientRect().width ?? 344 : 0) : leftOpen ? document.getElementById("mw-panel-left")?.getBoundingClientRect().width ?? 320 : 0;
+      const max = Math.max(PANEL_MIN, Math.min(PANEL_MAX, window.innerWidth - other - MAP_MIN));
+      return Math.round(Math.min(max, Math.max(PANEL_MIN, value)));
+    },
+    [leftOpen, rightOpen]
+  );
+
+  const resizePanel = useCallback(
+    (side, value) => setPanelWidths((widths) => ({ ...widths, [side]: clampWidth(side, value) })),
+    [clampWidth, setPanelWidths]
+  );
+
+  const closeTour = useCallback((completed) => {
+    setTourOpen(false);
+    setDashboardOpen(false);
+    try {
+      window.localStorage.setItem(TOUR_KEY, "1");
+    } catch {
+      /* storage unavailable: the tour simply shows again next time */
+    }
+    if (completed) push("success", "Tour complete. Reopen it any time from the help button in the header.");
+  }, [push]);
+
+  const tourSteps = useMemo(
+    () =>
+      buildTourSteps({
+        openLeft: () => setLeftOpen(true),
+        openRight: () => setRightOpen(true),
+        show2d: () => setViewMode("2d"),
+        openDashboard: () => setDashboardOpen(true),
+        closeDashboard: () => setDashboardOpen(false),
+      }),
+    []
+  );
+
+  // First visit: offer the tour once the map is ready.
+  useEffect(() => {
+    if (!mapReady || tourDone()) return undefined;
+    const timer = setTimeout(() => setTourOpen(true), 900);
+    return () => clearTimeout(timer);
+  }, [mapReady]);
+
   const closeDrawers = useCallback(() => {
     setLeftOpen(false);
     setRightOpen(false);
@@ -452,12 +692,22 @@ function App() {
     isCompact ? "mw-shell--compact" : "",
     leftOpen ? "is-left-open" : "",
     rightOpen ? "is-right-open" : "",
+    resizing ? "is-resizing" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
+  // Stored widths never squeeze the map below its minimum on a smaller window.
+  const fitWidth = (width, otherWidth) => (width ? Math.max(PANEL_MIN, Math.min(width, viewportWidth - otherWidth - MAP_MIN)) : null);
+  const leftWidth = leftOpen ? fitWidth(panelWidths.left, rightOpen ? panelWidths.right ?? 344 : 0) : null;
+  const rightWidth = rightOpen ? fitWidth(panelWidths.right, leftOpen ? leftWidth ?? 320 : 0) : null;
+  const shellStyle = {
+    ...(leftWidth ? { "--mw-left-width": `${leftWidth}px` } : {}),
+    ...(rightWidth ? { "--mw-right-width": `${rightWidth}px` } : {}),
+  };
+
   return (
-    <div className={shellClasses}>
+    <div className={shellClasses} style={shellStyle}>
       <a className="mw-skip-link" href="#mw-map-stage">
         Skip to map
       </a>
@@ -472,6 +722,9 @@ function App() {
         rightOpen={rightOpen}
         onToggleLeft={() => setLeftOpen((value) => !value)}
         onToggleRight={() => setRightOpen((value) => !value)}
+        onOpenWeather={() => setDashboardOpen(true)}
+        onOpenTour={() => setTourOpen(true)}
+        weatherBadge={forecastState.forecast}
       />
 
       <div className="mw-workspace">
@@ -536,7 +789,7 @@ function App() {
           />
         </aside>
 
-        <main id="mw-map-stage" className="mw-map-stage" aria-label="Mars terrain map">
+        <main id="mw-map-stage" className="mw-map-stage" aria-label="Mars terrain map" data-tour="map">
           {viewMode === "3d" ? (
             <Suspense fallback={<div className="mw-map-loading" role="status">Loading 3D terrain view…</div>}>
               <Terrain3D />
@@ -590,6 +843,7 @@ function App() {
           id="mw-panel-right"
           className="mw-panel mw-panel--right mw-scroll"
           aria-label="Mission Inspector"
+          data-tour="inspector"
           aria-hidden={isCompact && !rightOpen ? true : undefined}
           inert={isCompact && !rightOpen ? true : undefined}
         >
@@ -626,13 +880,91 @@ function App() {
             evaError={evaError}
             evaInputs={evaInputs}
             onEvaInputsChange={setEvaInputs}
+            weather={{
+              current: current.data,
+              currentLoading: current.loading,
+              currentError: current.error,
+              forecast: forecastState.forecast,
+              forecastLoading: forecastState.loading,
+              forecastError: forecastState.error,
+              horizon,
+              onHorizonChange: handleHorizonChange,
+              issueSol: forecastState.forecast?.issue_sol ?? issueSol,
+              replay: issueSolParam != null,
+              clock,
+              latestSol,
+              firstClockSol,
+              clockSol,
+              measured,
+              nowHour: nowForecast.hour,
+              nowLoading: nowForecast.loading,
+              onGoLive: () => latestSol != null && clock.goLive(latestSol),
+              route: weatherRoute,
+              onRetry: () => setWeatherReload((value) => value + 1),
+              onOpenDashboard: () => setDashboardOpen(true),
+              onFitHorizon: () => setHorizon({ start: 0, end: 168 }),
+            }}
           />
         </aside>
+
+        {!isCompact && leftOpen && (
+          <PanelResizer
+            side="left"
+            width={leftWidth}
+            min={PANEL_MIN}
+            max={PANEL_MAX}
+            label="Resize the route configuration panel"
+            onResize={(value) => resizePanel("left", value)}
+            onResizeStart={() => setResizing(true)}
+            onResizeEnd={() => setResizing(false)}
+            onReset={() => setPanelWidths((widths) => ({ ...widths, left: null }))}
+          />
+        )}
+        {!isCompact && rightOpen && (
+          <PanelResizer
+            side="right"
+            width={rightWidth}
+            min={PANEL_MIN}
+            max={PANEL_MAX}
+            label="Resize the Mission Inspector"
+            onResize={(value) => resizePanel("right", value)}
+            onResizeStart={() => setResizing(true)}
+            onResizeEnd={() => setResizing(false)}
+            onReset={() => setPanelWidths((widths) => ({ ...widths, right: null }))}
+          />
+        )}
 
         {isCompact && (leftOpen || rightOpen) && <div className="mw-scrim" onClick={closeDrawers} aria-hidden="true" />}
       </div>
 
-      <StatusBar routeStatus={routeStatus} routeResult={routeResult} scienceCount={scienceTargets.length} viewMode={viewMode} />
+      <StatusBar
+        routeStatus={routeStatus}
+        routeResult={routeResult}
+        scienceCount={scienceTargets.length}
+        viewMode={viewMode}
+        departure={forecastState.forecast?.recommended_departure ?? null}
+        nextWindow={forecastState.forecast?.windows?.[0] ?? null}
+        weatherNow={current.data}
+        weatherEstimate={nowForecast.hour}
+        clock={clock}
+        latestSol={latestSol}
+      />
+
+      <WeatherDashboard
+        open={dashboardOpen}
+        onClose={() => setDashboardOpen(false)}
+        status={weatherStatus}
+        forecastState={forecastState}
+        horizon={horizon}
+        onHorizonChange={handleHorizonChange}
+        issueSol={issueSolParam}
+        onIssueSolChange={(next) => (next == null ? latestSol != null && clock.goLive(latestSol) : clock.startAt(next + 1))}
+        limits={limits ?? weatherStatus?.default_limits ?? {}}
+        onLimitsChange={(next) => setLimits((currentLimits) => ({ ...currentLimits, ...next }))}
+        routeHours={routeHours}
+      />
+
+      <TourOverlay open={tourOpen} steps={tourSteps} onClose={closeTour} />
     </div>
   );
 }

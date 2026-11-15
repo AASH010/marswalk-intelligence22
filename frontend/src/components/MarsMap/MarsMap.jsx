@@ -14,7 +14,7 @@ import ScienceRasterLayer from "./ScienceRasterLayer";
 import TerrainRasterLayer from "./TerrainRasterLayer";
 import MapToolbar from "./MapToolbar";
 import MapLegend from "./MapLegend";
-import { CTX_BOUNDS, CursorTracker, FocusController, InitialView, MapClickHandler, MapResizeHandler } from "./MapControls";
+import { NAV_BOUNDS, CursorTracker, FocusController, InitialView, MapClickHandler, MapResizeHandler } from "./MapControls";
 import { PANES } from "./mapStyle";
 
 /**
@@ -111,7 +111,7 @@ function MarsMap({
         zoomSnap={0.25}
         minZoom={1}
         maxZoom={7}
-        maxBounds={CTX_BOUNDS}
+        maxBounds={NAV_BOUNDS}
         maxBoundsViscosity={1}
         zoomControl={false}
         className="mw-map__leaflet"
