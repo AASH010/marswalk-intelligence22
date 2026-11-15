@@ -1,0 +1,131 @@
+/*
+ * MarsWalk Intelligence — design tokens
+ * Source of truth: Design & Development Handoff v1.0, section 02 (Design System).
+ * Every colour used by the interface is declared here. Components reference
+ * the semantic names and never repeat raw hex values.
+ */
+
+:root {
+  /* 2.2 Colour tokens — surfaces */
+  --mw-deep-space: #080e14; /* Application canvas and deepest background */
+  --mw-mission-navy: #101923; /* Structural surfaces and top-level containers */
+  --mw-panel: #141f2a; /* Left sidebar and right inspector */
+  --mw-elevated: #1b2935; /* Cards, menus, popovers */
+  --mw-subtle: #202e3a; /* Secondary surface and hover backgrounds */
+
+  /* 2.2 Colour tokens — accents */
+  --mw-cyan: #55d6e8; /* Primary actions, focus accents, calculated route */
+  --mw-blue: #5689c7; /* Navigation controls, map tools, AOI boundary */
+  --mw-violet: #a78bfa; /* Science targets and scientific metadata */
+
+  /* 2.2 Colour tokens — status */
+  --mw-success: #55c99a; /* Successful operations and Start Point */
+  --mw-warning: #f4b860; /* Warnings, stale results, caution states */
+  --mw-critical: #f07178; /* Errors and Goal Point */
+  --mw-info: #70a9d8; /* Informational messages */
+
+  /* 2.2 Colour tokens — text */
+  --mw-text: #e8f0f5; /* Headings and high-priority content */
+  --mw-text-secondary: #93a4b2; /* Descriptions and supporting labels */
+  --mw-text-muted: #687b89; /* Metadata and disabled labels */
+
+  /* 2.2 Colour tokens — borders */
+  --mw-border: #293b49; /* Standard separators and outlines */
+  --mw-border-strong: #405464; /* Emphasised boundaries and selected controls */
+
+  /* Derived interaction states (mixes of the tokens above, no new hues) */
+  --mw-cyan-hover: color-mix(in srgb, var(--mw-cyan) 86%, #ffffff);
+  --mw-cyan-pressed: color-mix(in srgb, var(--mw-cyan) 84%, var(--mw-deep-space));
+  --mw-cyan-soft: color-mix(in srgb, var(--mw-cyan) 14%, transparent);
+  --mw-blue-soft: color-mix(in srgb, var(--mw-blue) 16%, transparent);
+  --mw-violet-soft: color-mix(in srgb, var(--mw-violet) 14%, transparent);
+  --mw-success-soft: color-mix(in srgb, var(--mw-success) 12%, transparent);
+  --mw-warning-soft: color-mix(in srgb, var(--mw-warning) 12%, transparent);
+  --mw-critical-soft: color-mix(in srgb, var(--mw-critical) 12%, transparent);
+  --mw-info-soft: color-mix(in srgb, var(--mw-info) 12%, transparent);
+  --mw-scrim: color-mix(in srgb, var(--mw-deep-space) 72%, transparent);
+  --mw-overlay-surface: color-mix(in srgb, var(--mw-mission-navy) 92%, transparent);
+
+  /* Brand mark only (logo planet). Not a UI colour. */
+  --mw-brand-mars: #c9623f;
+  --mw-brand-mars-shade: #8e3f28;
+
+  /* 2.4 Typography */
+  --mw-font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mw-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --mw-text-page: 700 24px/1.25 var(--mw-font-ui); /* Page heading 24–28 / Bold */
+  --mw-text-section: 600 16px/1.3 var(--mw-font-ui); /* Section heading 16–18 / Semibold */
+  --mw-text-card: 600 14px/1.35 var(--mw-font-ui); /* Card heading 14–16 / Semibold */
+  --mw-text-body: 400 14px/1.5 var(--mw-font-ui); /* Body 13–14 / Regular */
+  --mw-text-body-sm: 400 13px/1.5 var(--mw-font-ui);
+  --mw-text-support: 400 12px/1.45 var(--mw-font-ui); /* Supporting 11–12 / Regular */
+  --mw-text-caption: 400 11px/1.4 var(--mw-font-ui);
+  --mw-text-value: 500 13px/1.4 var(--mw-font-mono); /* Technical values 12–14 / Medium */
+  --mw-text-value-sm: 500 12px/1.4 var(--mw-font-mono);
+
+  /* 2.5 Spacing — 4-point scale */
+  --mw-space-1: 4px;
+  --mw-space-2: 8px;
+  --mw-space-3: 12px;
+  --mw-space-4: 16px;
+  --mw-space-6: 24px;
+  --mw-space-8: 32px;
+  --mw-space-12: 48px;
+  --mw-space-16: 64px;
+
+  /* 2.5 Radius */
+  --mw-radius-sm: 4px; /* compact technical controls */
+  --mw-radius-md: 8px; /* inputs and buttons */
+  --mw-radius-lg: 12px; /* cards and panels */
+  --mw-radius-pill: 999px;
+
+  /* 2.5 Elevation — only for floating menus and overlays */
+  --mw-shadow-overlay: 0 8px 24px color-mix(in srgb, var(--mw-deep-space) 55%, transparent);
+
+  /* 2.5 Focus ring */
+  --mw-focus-ring: 2px solid var(--mw-cyan);
+  --mw-focus-offset: 2px;
+
+  /* Motion */
+  --mw-duration-fast: 120ms;
+  --mw-duration-panel: 200ms;
+  --mw-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* 3.3 Layout */
+  --mw-header-height: 56px;
+  --mw-statusbar-height: 28px;
+  --mw-left-width: 320px;
+  --mw-right-width: 344px;
+  --mw-control-height: 36px;
+  --mw-hit-target: 32px;
+
+  /* 3.2 z-index order: map → map controls → panels → menus → notifications */
+  --mw-z-map: 0;
+  --mw-z-map-overlay: 10;
+  --mw-z-scrim: 20;
+  --mw-z-panel: 30;
+  --mw-z-popover: 50;
+  --mw-z-toast: 60;
+}
+
+@media (max-width: 1279.98px) {
+  :root {
+    --mw-left-width: 296px;
+    --mw-right-width: 316px;
+  }
+}
+
+@media (pointer: coarse) {
+  :root {
+    --mw-control-height: 40px;
+    --mw-hit-target: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mw-duration-fast: 0ms;
+    --mw-duration-panel: 0ms;
+  }
+}

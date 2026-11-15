@@ -6,10 +6,24 @@ import { OrbitControls } from "@react-three/drei";
 
 import * as THREE from "three";
 
+import { getHeightmap, TERRAIN_TEXTURE_URL } from "../../api/terrain";
+import Spinner from "../ui/Spinner";
+
 import "./Terrain3D.css";
 
+// three.js cannot read CSS custom properties, so the scene's interface
+// colours repeat the design tokens from src/styles/tokens.css by value.
+const SCENE_BACKGROUND = "#080E14"; // Deep Space
+const GRID_MAJOR = "#405464"; // Strong Border
+const GRID_MINOR = "#293B49"; // Default Border
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+// Terrain shading used only when the CTX texture is unavailable. These are
+// surface colours for the elevation model, not interface tokens: they stand in
+// for imagery, so they stay outside the design system's palette.
+const SLOPE_SHADING_LOW = "#765b43";
+const SLOPE_SHADING_MID = "#b58b55";
+const SLOPE_SHADING_HIGH = "#d9c7a0";
+const NO_DATA_SHADING = "#252b2e"; // cells without a valid elevation sample
 
 const VERTICAL_EXAGGERATION = 2;
 
@@ -198,10 +212,10 @@ function buildTerrainGeometry(
 
   const color = new THREE.Color();
 
-  const fallbackLow = new THREE.Color("#765b43");
-  const fallbackMid = new THREE.Color("#b58b55");
-  const fallbackHigh = new THREE.Color("#d9c7a0");
-  const invalidColor = new THREE.Color("#252b2e");
+  const fallbackLow = new THREE.Color(SLOPE_SHADING_LOW);
+  const fallbackMid = new THREE.Color(SLOPE_SHADING_MID);
+  const fallbackHigh = new THREE.Color(SLOPE_SHADING_HIGH);
+  const invalidColor = new THREE.Color(NO_DATA_SHADING);
 
   for (let row = 0; row < rows; row++) {
 
@@ -381,7 +395,7 @@ function useCTXTexture() {
     const loader = new THREE.TextureLoader();
 
     loader.load(
-      `${API_BASE}/api/v1/terrain/texture?v=2`,
+      TERRAIN_TEXTURE_URL,
 
       (result) => {
 
@@ -490,7 +504,7 @@ function Scene({ data, texture }) {
     <>
       <color
         attach="background"
-        args={["#101416"]}
+        args={[SCENE_BACKGROUND]}
       />
 
       {/* Soft environmental lighting */}
@@ -526,8 +540,8 @@ function Scene({ data, texture }) {
         args={[
           120,
           12,
-          "#394247",
-          "#222a2e",
+          GRID_MAJOR,
+          GRID_MINOR,
         ]}
         position={[0, -0.8, 0]}
       />
@@ -564,69 +578,33 @@ export default function Terrain3D() {
 
   useEffect(() => {
 
-    const controller = new AbortController();
+    let active = true;
 
-    async function loadTerrain() {
+    // The heightmap is loaded once and shared with the 2D Slope and
+    // Elevation overlays (see api/terrain.js).
+    setLoading(true);
+    setError("");
 
-      try {
-
-        setLoading(true);
-        setError("");
-
-        const response = await fetch(
-          `${API_BASE}/api/v1/terrain/heightmap?max_dimension=256`,
-          {
-            signal: controller.signal,
-          }
-        );
-
-        if (!response.ok) {
-
-          const detail = await response.text();
-
-          throw new Error(
-            `Terrain API ${response.status}: ${detail}`
-          );
-        }
-
-        const payload = await response.json();
-
-        if (
-          !payload.elevation_m ||
-          !payload.slope_deg ||
-          !payload.valid_mask ||
-          !payload.row_indices ||
-          !payload.col_indices ||
-          !payload.transform
-        ) {
-          throw new Error(
-            "Terrain API response is missing required fields."
-          );
-        }
-
-        setData(payload);
-
-      } catch (err) {
-
-        if (err.name !== "AbortError") {
-
+    getHeightmap()
+      .then((payload) => {
+        if (active) setData(payload);
+      })
+      .catch((err) => {
+        console.error("[terrain] heightmap unavailable:", err);
+        if (active) {
           setError(
-            err.message ||
-            "Could not load terrain."
+            err?.detail ||
+            "The processed elevation model could not be loaded."
           );
         }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
-      } finally {
-
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadTerrain();
-
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
 
   }, []);
 
@@ -634,8 +612,9 @@ export default function Terrain3D() {
   if (loading) {
 
     return (
-      <div className="terrain3d-state">
-        LOADING JEZERO ELEVATION MODEL…
+      <div className="terrain3d-state" role="status">
+        <Spinner size={18} />
+        <span>Loading Jezero elevation model…</span>
       </div>
     );
   }
@@ -644,8 +623,10 @@ export default function Terrain3D() {
   if (error) {
 
     return (
-      <div className="terrain3d-state terrain3d-state--error">
-        3D TERRAIN UNAVAILABLE · {error}
+      <div className="terrain3d-state terrain3d-state--error" role="alert">
+        <strong>3D terrain is currently unavailable.</strong>
+        <span>{error}</span>
+        <span>The 2D map remains accessible.</span>
       </div>
     );
   }
@@ -690,39 +671,39 @@ export default function Terrain3D() {
       <div className="terrain3d__legend">
 
         <strong>
-          JEZERO · 3D TERRAIN
+          Jezero · 3D terrain
         </strong>
 
         <span>
           DEM {data.source_width} × {data.source_height}
           {" · "}
-          DISPLAY {data.width} × {data.height}
+          display {data.width} × {data.height}
         </span>
 
         <span>
-          ELEVATION {minElevation.toFixed(1)}
+          Elevation {minElevation.toFixed(1)}
           {" → "}
           {maxElevation.toFixed(1)} m
         </span>
 
         <span>
-          MAX SLOPE{" "}
+          Max slope{" "}
           {(Number.isFinite(maxSlope) ? maxSlope : 0).toFixed(1)}
           °
           {" · "}
-          VERTICAL EXAGGERATION {VERTICAL_EXAGGERATION}×
+          vertical exaggeration {VERTICAL_EXAGGERATION}×
         </span>
 
         <span>
           {texture
-            ? "CTX ORTHOMOSAIC TEXTURE READY"
+            ? "CTX orthomosaic texture loaded"
             : textureError
-              ? `CTX TEXTURE ERROR · ${textureError}`
-              : "LOADING CTX TEXTURE..."}
+              ? "CTX texture unavailable · showing slope shading"
+              : "Loading CTX texture…"}
         </span>
 
         <span>
-          DRAG TO ORBIT · SCROLL TO ZOOM
+          Drag to orbit · scroll to zoom
         </span>
 
       </div>

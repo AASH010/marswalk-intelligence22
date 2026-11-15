@@ -1,0 +1,187 @@
+/* Base element styles, typography and focus treatment. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--mw-deep-space);
+  color: var(--mw-text);
+  font: var(--mw-text-body);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+dl,
+dd,
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--mw-cyan);
+}
+
+/* 2.5 Focus ring — 2 px, high contrast, never removed without a replacement */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: var(--mw-focus-ring);
+  outline-offset: var(--mw-focus-offset);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--mw-cyan) 35%, transparent);
+}
+
+/* Technical values: IBM Plex Mono with tabular numerals (2.4) */
+.mw-mono {
+  font-family: var(--mw-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.mw-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mw-skip-link {
+  position: absolute;
+  top: var(--mw-space-2);
+  left: var(--mw-space-2);
+  z-index: 100;
+  padding: var(--mw-space-2) var(--mw-space-3);
+  border-radius: var(--mw-radius-md);
+  background: var(--mw-cyan);
+  color: var(--mw-deep-space);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.mw-skip-link:focus {
+  transform: translateY(0);
+}
+
+/* Thin, quiet scrollbars for the side panels */
+.mw-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mw-border-strong) transparent;
+}
+
+.mw-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.mw-scroll::-webkit-scrollbar-thumb {
+  background: var(--mw-border-strong);
+  border-radius: var(--mw-radius-pill);
+  border: 2px solid var(--mw-panel);
+}
+
+.mw-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes mw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mw-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes mw-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes mw-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 2.6 Honour reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .mw-spinner {
+    animation: none !important;
+  }
+}
