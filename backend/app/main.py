@@ -54,14 +54,19 @@ TILES_PATH = (
     / "ctx_ortho"
 )
 
-# Ensure tiles directory exists before mounting to avoid RuntimeError in test environments
-TILES_PATH.mkdir(parents=True, exist_ok=True)
+# Ensure tiles directory exists before mounting to avoid RuntimeError in test environments.
+# On read-only deployments (Vercel) tiles are served by the CDN from frontend/public instead.
+try:
+    TILES_PATH.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 
-app.mount(
-    "/tiles/ctx",
-    CachedStaticFiles(directory=TILES_PATH),
-    name="ctx-tiles",
-)
+if TILES_PATH.is_dir():
+    app.mount(
+        "/tiles/ctx",
+        CachedStaticFiles(directory=TILES_PATH),
+        name="ctx-tiles",
+    )
 
 
 CRISM_ASSETS_PATH = (

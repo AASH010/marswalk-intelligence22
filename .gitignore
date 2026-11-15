@@ -162,3 +162,9 @@ docker-compose.override.yml
 *.swp
 *.swo
 *~
+
+# --- Vercel deploy: small runtime data is tracked, tiles go via LFS in frontend/public ---
+!data/processed/jezero/
+data/processed/jezero/tiles/
+!data/processed/jezero/**/*.tif
+!data/processed/jezero/**/*.png
