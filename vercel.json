@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd frontend && npm install",
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/science/:path*", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" }
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{frontend/**,notebooks/**,docs/**,scripts/**,data/raw/**,data/sample/**,data/processed/jezero/tiles/**,**/tests/**,**/__pycache__/**,.git/**}"
+    }
+  }
+}
