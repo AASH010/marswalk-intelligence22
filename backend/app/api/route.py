@@ -1,10 +1,13 @@
-import rasterio
-
 from fastapi import APIRouter, HTTPException, status
 
 from app.schemas.route import RouteRequest, GeoJSONResponse
-from app.core.terrain.geotiff import load_terrain, grid_to_map
-from app.services.route_service import calculate_route
+from app.services.navigation_service import (
+    RouteInputError,
+    RouteNotFound,
+    TerrainUnavailable,
+    WeatherRequired,
+    plan_route,
+)
 
 
 router = APIRouter()
@@ -13,92 +16,80 @@ router = APIRouter()
 @router.post(
     "/navigate",
     response_model=GeoJSONResponse,
+    response_model_exclude_unset=True,
     status_code=status.HTTP_200_OK,
 )
 def navigate(request: RouteRequest):
+    """Weather-aware route between two Mars map coordinates.
 
-    terrain = load_terrain()
+    Request and response keep their earlier fields. Added:
 
-    terrain_cost = terrain["terrain_cost"]
-    blocked_mask = terrain["blocked_mask"]
-    resolution = terrain["resolution"]
-    transform = terrain["transform"]
+    * request: optional ``sol``, ``start_time`` (LMST) and ``include_profile``;
+    * response properties: corrected ``optimization_cost`` (the A* objective),
+      ``weather_status``, ``weather_time``, ``weather_time_difference_s``,
+      ``confidence``, ``weather``, ``cost_model``, ``route_profile_summary``,
+      and ``profile`` only when ``include_profile`` is true.
 
-    rows, cols = terrain_cost.shape
-
-    # Convert projected Mars coordinates to raster grid indices.
-    start_x, start_y = request.start
-    goal_x, goal_y = request.goal
-
-    start_row, start_col = rasterio.transform.rowcol(
-        transform, start_x, start_y
-    )
-
-    goal_row, goal_col = rasterio.transform.rowcol(
-        transform, goal_x, goal_y
-    )
-
-    start = (int(start_row), int(start_col))
-    goal = (int(goal_row), int(goal_col))
-
-    # Validate raster boundaries.
-    for name, (row, col) in [
-        ("Start", start),
-        ("Goal", goal),
-    ]:
-        if not (0 <= row < rows and 0 <= col < cols):
-            raise HTTPException(
-                status_code=400,
-                detail=f"{name} coordinates outside terrain raster."
-            )
-
-    # Calculate route.
+    Status codes: 400 invalid input (outside raster, blocked cell, same cell,
+    bad time), 404 no route, 422 schema errors or W_t required by the
+    configuration but unavailable, 503 DEM unavailable.
+    """
     try:
-        result = calculate_route(
-            terrain_cost=terrain_cost,
-            blocked_mask=blocked_mask,
-            start=start,
-            goal=goal,
-            resolution=resolution,
-            mode_name=request.mode,
+        planned = plan_route(
+            start_xy=request.start,
+            goal_xy=request.goal,
+            mode=request.mode,
+            sol=request.sol,
+            start_time=request.start_time,
         )
-    except ValueError as error:
-        raise HTTPException(
-            status_code=400,
-            detail=str(error),
-        )
+    except RouteInputError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    except RouteNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except WeatherRequired as error:
+        raise HTTPException(status_code=422, detail=str(error))
+    except TerrainUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error))
 
-    if result is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No valid route found."
-        )
+    result = planned.result
+    selection = planned.selection
+    record = selection.record
 
-    # Convert resulting grid path to projected Mars coordinates.
-    gis_path = [
-        grid_to_map(row, col, transform)
-        for row, col in result["path"]
-    ]
+    properties = {
+        "mode": result["mode"],
+        "distance_km": round(result["distance_km"], 3),
+        "raw_terrain_cost": round(result["raw_terrain_cost"], 2),
+        "average_raw_terrain_cost": round(
+            result["average_raw_terrain_cost"], 4
+        ),
+        "optimization_cost": round(
+            result["optimization_cost"], 2
+        ),
+        "average_optimization_cost": round(
+            result["average_optimization_cost"], 4
+        ),
+        "weather_status": selection.status,
+        "weather_time": (
+            {"sol": record.sol, "lmst": record.lmst, "ltst": record.ltst, "sclk": record.sclk}
+            if record is not None
+            else None
+        ),
+        "weather_time_difference_s": selection.time_difference_s,
+        "confidence": planned.confidence,
+        "weather": selection.to_dict(),
+        "cost_model": planned.cost_model,
+        "route_profile_summary": planned.profile["summary"],
+    }
+
+    if request.include_profile:
+        properties["profile"] = planned.profile
 
     feature = {
         "type": "Feature",
-        "properties": {
-            "mode": result["mode"],
-            "distance_km": round(result["distance_km"], 3),
-            "raw_terrain_cost": round(result["raw_terrain_cost"], 2),
-            "average_raw_terrain_cost": round(
-                result["average_raw_terrain_cost"], 4
-            ),
-            "optimization_cost": round(
-                result["optimization_cost"], 2
-            ),
-            "average_optimization_cost": round(
-                result["average_optimization_cost"], 4
-            ),
-        },
+        "properties": properties,
         "geometry": {
             "type": "LineString",
-            "coordinates": gis_path,
+            "coordinates": planned.coordinates,
         },
     }
 
@@ -106,4 +97,3 @@ def navigate(request: RouteRequest):
         "type": "FeatureCollection",
         "features": [feature],
     }
-    

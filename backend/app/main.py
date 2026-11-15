@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.api.route import router as navigation_router
 from app.api.mission import router as mission_router
+from app.api.mission import eva_router as mission_eva_router
 from app.api.science import router as science_router
 from app.api.terrain import router as terrain_router
 from app.api.weather import router as weather_router
@@ -54,19 +55,14 @@ TILES_PATH = (
     / "ctx_ortho"
 )
 
-# Ensure tiles directory exists before mounting to avoid RuntimeError in test environments.
-# On read-only deployments (Vercel) tiles are served by the CDN from frontend/public instead.
-try:
-    TILES_PATH.mkdir(parents=True, exist_ok=True)
-except OSError:
-    pass
+# Ensure tiles directory exists before mounting to avoid RuntimeError in test environments
+TILES_PATH.mkdir(parents=True, exist_ok=True)
 
-if TILES_PATH.is_dir():
-    app.mount(
-        "/tiles/ctx",
-        CachedStaticFiles(directory=TILES_PATH),
-        name="ctx-tiles",
-    )
+app.mount(
+    "/tiles/ctx",
+    CachedStaticFiles(directory=TILES_PATH),
+    name="ctx-tiles",
+)
 
 
 CRISM_ASSETS_PATH = (
@@ -112,6 +108,10 @@ app.include_router(
 
 app.include_router(
     mission_router
+)
+
+app.include_router(
+    mission_eva_router
 )
 
 app.include_router(

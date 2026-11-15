@@ -31,7 +31,7 @@ import { useToasts } from "./hooks/useToasts";
 
 import { DEFAULT_STRATEGY_ID, ROUTE_STRATEGIES, isSupportedStrategy, planRoute } from "./api/routes";
 import { CRISM_OVERLAY_URL, getScienceTargets } from "./api/science";
-import { estimateConsumables } from "./api/mission";
+import { estimateEva } from "./api/mission";
 import { getHeightmap } from "./api/terrain";
 import { getHealth, probeImage } from "./api/system";
 import { MAX_HORIZON_HOURS, getCurrentWeather, getForecast, getWeatherStatus } from "./api/weather";
@@ -46,7 +46,9 @@ import "./styles/layout.css";
 import "./styles/weather.css";
 
 const EMPTY_DRAFT = { pointType: "start", x: "", y: "" };
-const DEFAULT_EVA_INPUTS = { payloadKg: 15, averageSlopePercent: 5 };
+// Payload is the only EVA input the user sets. Distance, slope, grade and
+// terrain come from the route the server plans.
+const DEFAULT_EVA_INPUTS = { payloadKg: 15 };
 const DEFAULT_HORIZON = { start: 0, end: 48 };
 const PANEL_MIN = 260;
 const PANEL_MAX = 680;
@@ -382,8 +384,10 @@ function App() {
 
   // The EVA duration estimated for the current route decides which GO windows are long enough.
   const routeHours =
-    routeStatus === ROUTE_STATUS.CALCULATED && Number.isFinite(eva?.estimated_duration_hours) && eva.estimated_duration_hours > 0
-      ? eva.estimated_duration_hours
+    routeStatus === ROUTE_STATUS.CALCULATED &&
+    Number.isFinite(eva?.totals?.duration_hours?.value) &&
+    eva.totals.duration_hours.value > 0
+      ? eva.totals.duration_hours.value
       : null;
   const weatherRoute = useMemo(() => {
     if (!routeResult) return { state: "none", hours: null };
@@ -548,13 +552,15 @@ function App() {
     });
   }, [startPoint, goalPoint]);
 
-  // EVA consumables for the current result. Re-run when the result or the
-  // user's planning assumptions change.
+  // EVA estimate for the current result. The server re-plans the same route
+  // (same start, goal, strategy and default weather time as /navigate) and
+  // computes every segment itself; only the payload comes from the user.
+  // Re-run when the result or the payload changes.
   useEffect(() => {
-    const metrics = routeResult?.metrics;
-    if (!metrics || metrics.distance_km == null || metrics.average_raw_terrain_cost == null) {
+    const snapshot = routeResult?.snapshot;
+    if (!snapshot?.start || !snapshot?.goal) {
       setEva(null);
-      setEvaError(metrics ? "The route response did not include the distance and terrain cost this model requires." : null);
+      setEvaError(null);
       return undefined;
     }
 
@@ -563,11 +569,11 @@ function App() {
     setEvaLoading(true);
     setEvaError(null);
 
-    estimateConsumables(
+    estimateEva(
       {
-        distanceKm: metrics.distance_km,
-        averageRawTerrainCost: metrics.average_raw_terrain_cost,
-        averageSlopePercent: evaInputs.averageSlopePercent,
+        start: [snapshot.start.x, snapshot.start.y],
+        goal: [snapshot.goal.x, snapshot.goal.y],
+        mode: snapshot.strategyId,
         payloadKg: evaInputs.payloadKg,
       },
       { signal: controller.signal }
@@ -577,9 +583,9 @@ function App() {
       })
       .catch((error) => {
         if (!active || error.kind === "aborted") return;
-        console.error("[mission] consumables unavailable:", error);
+        console.error("[mission] EVA estimate unavailable:", error);
         setEva(null);
-        setEvaError(isServiceFailure(error) ? "The consumables service could not be reached." : error.message);
+        setEvaError(isServiceFailure(error) ? "The EVA estimate service could not be reached." : error.message);
       })
       .finally(() => {
         if (active) setEvaLoading(false);

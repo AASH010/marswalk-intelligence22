@@ -1,54 +1,99 @@
 import { useEffect, useState } from "react";
 
-import Button from "../ui/Button";
 import EmptyState from "../ui/EmptyState";
 import InlineMessage from "../ui/InlineMessage";
 import Metric from "../ui/Metric";
 import ProvenanceRow from "../ui/ProvenanceRow";
+import StatusBadge from "../ui/StatusBadge";
 import { TextField } from "../ui/Field";
 import { formatFixed, formatInteger } from "../../utils/format";
 
 /**
- * EVA resources (handoff §4.8).
+ * EVA resources (handoff §4.8), from POST /api/v1/mission/eva-estimate.
  *
- * Every value comes from the mission consumables service. The two inputs are
- * planning assumptions the user supplies; the frontend performs no estimate
- * of its own and labels these as model outputs, not operational limits.
+ * The server plans the route itself and evaluates every segment: distance,
+ * slope, grade and terrain all come from the route, never from the user.
+ * The only user input is the carried payload. Each value carries a tag
+ * (measured / calculated / modeled / assumed), shown next to it.
  */
-const ASSUMPTION_ROWS = [
-  ["base_walking_speed_ms", "Base walking speed", "m/s"],
-  ["suit_capacity_hours", "Suit capacity", "h"],
-  ["base_system_mass_kg", "Suit + crew mass", "kg"],
-  ["payload_mass_kg", "Payload mass", "kg"],
-  ["kcal_per_liter_o2", "kcal per litre O₂", ""],
-  ["mars_gravity_m_s2", "Mars gravity", "m/s²"],
-  ["muscular_efficiency", "Muscular efficiency", ""],
-];
+const TAG_LABELS = {
+  measured: "Measured",
+  calculated: "Calculated",
+  modeled: "Modeled",
+  assumed: "Assumed",
+};
+
+const PARAMETER_LABELS = {
+  base_walking_speed_ms: "Base walking speed",
+  payload_kg: "Payload",
+  suit_capacity_hours: "Suit capacity",
+  k_t: "Terrain slowdown k_t",
+  k_s: "Slope slowdown k_s",
+  body_mass_kg: "Body mass",
+  suit_mass_kg: "Suit mass",
+  terrain_factor_eta: "Terrain factor η",
+  pandolf_coefficients: "Pandolf coefficients",
+  mars_gravity_m_s2: "Mars gravity",
+  earth_gravity_m_s2: "Earth gravity",
+  gravity_scale: "Gravity scale",
+  kcal_per_hour_per_watt: "kcal/h per watt",
+  kcal_per_liter_o2: "kcal per litre O₂",
+  min_metabolic_rate_kcal_hr: "Min. reported rate",
+  max_metabolic_rate_kcal_hr: "Max. reported rate",
+  weather_energy_coefficient: "Weather energy term",
+};
+
+const WEATHER_BADGES = {
+  applied: { status: "calculated", label: "Weather applied" },
+  unavailable: { status: "unavailable", label: "Weather unavailable" },
+  disabled: { status: "unavailable", label: "Weather off" },
+};
+
+const CONFIDENCE_LABELS = {
+  high: "High: weather and terrain both applied",
+  reduced: "Reduced: route planned without weather",
+  invalid: "Invalid: the route could not be evaluated",
+};
+
+function tagNote(entry) {
+  return entry?.tag ? TAG_LABELS[entry.tag] || entry.tag : null;
+}
+
+function formatParameter(param) {
+  if (typeof param.value === "number") {
+    const value = Number.isInteger(param.value) ? param.value : Number(param.value.toPrecision(4));
+    return `${value}${param.unit && param.unit !== "1" ? ` ${param.unit}` : ""}`;
+  }
+  return typeof param.value === "string" ? param.value : null;
+}
 
 function EvaSection({ eva, loading, error, inputs, onInputsChange, hasRoute, routeStale }) {
-  const [draft, setDraft] = useState({ payloadKg: String(inputs.payloadKg), averageSlopePercent: String(inputs.averageSlopePercent) });
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [draft, setDraft] = useState(String(inputs.payloadKg));
+  const [fieldError, setFieldError] = useState(null);
 
   useEffect(() => {
-    setDraft({ payloadKg: String(inputs.payloadKg), averageSlopePercent: String(inputs.averageSlopePercent) });
-  }, [inputs.payloadKg, inputs.averageSlopePercent]);
+    setDraft(String(inputs.payloadKg));
+  }, [inputs.payloadKg]);
 
   if (!hasRoute) {
     return <EmptyState>EVA resource information is not available until a route has been calculated.</EmptyState>;
   }
 
-  const commit = (key, value) => {
+  const commit = (value) => {
     const text = value.trim();
     const parsed = Number(text);
-    if (text === "" || !Number.isFinite(parsed) || parsed < 0) {
-      setFieldErrors((current) => ({ ...current, [key]: "Enter a number of 0 or more." }));
+    if (text === "" || !Number.isFinite(parsed) || parsed < 0 || parsed > 500) {
+      setFieldError("Enter a payload between 0 and 500 kg.");
       return;
     }
-    setFieldErrors((current) => ({ ...current, [key]: undefined }));
-    if (parsed !== inputs[key]) onInputsChange({ ...inputs, [key]: parsed });
+    setFieldError(null);
+    if (parsed !== inputs.payloadKg) onInputsChange({ ...inputs, payloadKg: parsed });
   };
 
   const state = loading ? "loading" : undefined;
+  const totals = eva?.totals;
+  const weatherBadge = WEATHER_BADGES[eva?.weatherStatus];
+  const clamped = totals?.metabolic_rate_clamped === true;
 
   return (
     <div className="mw-stack">
@@ -58,116 +103,124 @@ function EvaSection({ eva, loading, error, inputs, onInputsChange, hasRoute, rou
         </InlineMessage>
       )}
 
-      {!error && eva?.oxygen_percent_of_suit_capacity != null && eva.oxygen_percent_of_suit_capacity > 100 && (
-        <InlineMessage tone="warning" compact live={false}>
-          The model reports a duration of {formatFixed(eva.estimated_duration_hours, 2)} h against a suit capacity of{" "}
-          {formatFixed(eva.assumptions?.suit_capacity_hours, 1) ?? "—"} h, so this estimate exceeds the capacity it was given.
-        </InlineMessage>
-      )}
-
       {error ? (
         <InlineMessage tone="warning" title="EVA resource information is not available for this route.">
           {error}
         </InlineMessage>
       ) : (
-        <div className="mw-metric-list">
-          <Metric
-            label="Duration"
-            value={formatFixed(eva?.estimated_duration_hours, 2)}
-            unit="h"
-            state={state}
-            stale={routeStale}
-          />
-          <Metric
-            label="O₂ estimate"
-            value={formatInteger(eva?.estimated_oxygen_liters)}
-            unit="L"
-            state={state}
-            stale={routeStale}
-          />
-          <Metric
-            label="Capacity used"
-            value={formatFixed(eva?.oxygen_percent_of_suit_capacity, 1)}
-            unit="%"
-            state={state}
-            stale={routeStale}
-          />
-          <Metric label="Safety margin" value={formatFixed(eva?.safety_margin_hours, 2)} unit="h" state={state} stale={routeStale} />
-          <Metric
-            label="Metabolic rate"
-            value={formatFixed(eva?.average_metabolic_rate_kcal_hr, 1)}
-            unit="kcal/h"
-            state={state}
-            stale={routeStale}
-          />
-          <Metric
-            label="Slope penalty"
-            value={formatFixed(eva?.slope_penalty_kcal_hr, 1)}
-            unit="kcal/h"
-            state={state}
-            stale={routeStale}
-          />
-          <Metric
-            label="Payload penalty"
-            value={formatFixed(eva?.payload_penalty_kcal_hr, 1)}
-            unit="kcal/h"
-            state={state}
-            stale={routeStale}
-          />
-        </div>
+        <>
+          {eva && !loading && (
+            <div className="mw-stack">
+              {weatherBadge && (
+                <div>
+                  <StatusBadge status={weatherBadge.status} label={weatherBadge.label} />
+                </div>
+              )}
+              {eva.confidence && (
+                <p className="mw-helper">Confidence: {CONFIDENCE_LABELS[eva.confidence] || eva.confidence}</p>
+              )}
+            </div>
+          )}
+
+          {!loading &&
+            eva?.warnings?.map((warning) => (
+              <InlineMessage key={warning} tone="warning" compact live={false}>
+                {warning}
+              </InlineMessage>
+            ))}
+
+          <div className="mw-metric-list">
+            <Metric
+              label="Duration"
+              value={formatFixed(totals?.duration_hours?.value, 2)}
+              unit="h"
+              note={tagNote(totals?.duration_hours)}
+              state={state}
+              stale={routeStale}
+            />
+            <Metric
+              label="Suit time used"
+              value={formatFixed(totals?.suit_time_fraction_percent?.value, 1)}
+              unit="%"
+              note={tagNote(totals?.suit_time_fraction_percent)}
+              help="Walking time as a share of suit time capacity. This is time, not oxygen."
+              state={state}
+              stale={routeStale}
+            />
+            <Metric
+              label="Suit time margin"
+              value={formatFixed(totals?.suit_time_margin_hours?.value, 2)}
+              unit="h"
+              note={tagNote(totals?.suit_time_margin_hours)}
+              state={state}
+              stale={routeStale}
+            />
+            <Metric
+              label="O₂ estimate"
+              value={formatInteger(totals?.oxygen_liters?.value)}
+              unit="L"
+              note={tagNote(totals?.oxygen_liters)}
+              state={state}
+              stale={routeStale}
+            />
+            <Metric
+              label="Energy"
+              value={formatInteger(totals?.energy_kcal?.value)}
+              unit="kcal"
+              note={tagNote(totals?.energy_kcal)}
+              state={state}
+              stale={routeStale}
+            />
+            <Metric
+              label="Metabolic rate"
+              value={formatFixed(totals?.average_metabolic_rate_kcal_hr?.value, 1)}
+              unit="kcal/h"
+              note={
+                clamped
+                  ? `Outside the configured range; reported as ${formatFixed(totals?.reported_metabolic_rate_kcal_hr?.value, 1)} kcal/h`
+                  : tagNote(totals?.average_metabolic_rate_kcal_hr)
+              }
+              state={state}
+              stale={routeStale}
+            />
+          </div>
+        </>
       )}
 
       <section>
-        <h4 className="mw-section-title">Planning assumptions</h4>
-        <div className="mw-manual__pair">
-          <TextField
-            label="Payload"
-            inputMode="decimal"
-            suffix="kg"
-            value={draft.payloadKg}
-            error={fieldErrors.payloadKg}
-            onChange={(value) => setDraft((current) => ({ ...current, payloadKg: value }))}
-            onBlur={(event) => commit("payloadKg", event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-          />
-          <TextField
-            label="Average slope"
-            inputMode="decimal"
-            suffix="%"
-            value={draft.averageSlopePercent}
-            error={fieldErrors.averageSlopePercent}
-            onChange={(value) => setDraft((current) => ({ ...current, averageSlopePercent: value }))}
-            onBlur={(event) => commit("averageSlopePercent", event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-          />
-        </div>
+        <h4 className="mw-section-title">Planning input</h4>
+        <TextField
+          label="Payload"
+          inputMode="decimal"
+          suffix="kg"
+          value={draft}
+          error={fieldError}
+          onChange={setDraft}
+          onBlur={(event) => commit(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+        />
         <p className="mw-helper">
-          These two values are sent to the consumables model with the route distance and terrain cost. They are user assumptions, not
-          measurements from the route.
+          Payload is the only value you set. Distance, slope, grade and terrain are taken from the planned route on the server, segment by
+          segment.
         </p>
       </section>
 
-      {eva?.assumptions && (
+      {eva?.parameters?.length > 0 && (
         <section>
           <h4 className="mw-section-title">Model parameters</h4>
           <dl className="mw-provenance">
-            {ASSUMPTION_ROWS.map(([key, label, unit]) => {
-              const value = eva.assumptions[key];
-              return (
-                <ProvenanceRow
-                  key={key}
-                  label={label}
-                  value={typeof value === "number" ? `${value}${unit ? ` ${unit}` : ""}` : null}
-                />
-              );
-            })}
+            {eva.parameters.map((param) => (
+              <ProvenanceRow
+                key={param.name}
+                label={PARAMETER_LABELS[param.name] || param.name}
+                value={formatParameter(param)}
+                detail={`${TAG_LABELS[param.tag] || param.tag} · ${param.source}`}
+              />
+            ))}
           </dl>
-          {eva.assumptions.disclaimer && <p className="mw-helper">{eva.assumptions.disclaimer}</p>}
-          <p className="mw-helper">Planning-model outputs only. These values are not operational flight limits.</p>
+          {eva.model?.validation && <p className="mw-helper">{eva.model.validation}</p>}
         </section>
       )}
     </div>

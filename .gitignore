@@ -64,6 +64,14 @@ data/interim/*
 data/processed/*
 !data/processed/.gitkeep
 
+# Generated inputs of the weather-aware EVA flow (also covered by the rule
+# above; listed so they stay ignored if that rule is ever narrowed):
+#   processed DEM used by routing
+data/processed/jezero/terrain/
+#   Task 1 MEDA pipeline output (--out-dir): weather_intensity.parquet,
+#   observations.parquet, manifest.json, qa_report.*, variables.json
+data/resources/MEDA_Weather_ds/processed/
+
 # Keep only small sample/demo data
 !data/sample/
 !data/sample/**
@@ -162,9 +170,3 @@ docker-compose.override.yml
 *.swp
 *.swo
 *~
-
-# --- Vercel deploy: small runtime data is tracked, tiles go via LFS in frontend/public ---
-!data/processed/jezero/
-data/processed/jezero/tiles/
-!data/processed/jezero/**/*.tif
-!data/processed/jezero/**/*.png

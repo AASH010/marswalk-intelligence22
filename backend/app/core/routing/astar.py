@@ -49,6 +49,53 @@ def heuristic(
     return distance * minimum_cost
 
 
+def movement_distance(
+    previous: tuple[int, int],
+    current: tuple[int, int],
+    cell_size: float,
+) -> float:
+    """Physical length of one move between neighbouring cells (m).
+
+    Uses the same multipliers as MOVEMENTS: 1 for straight moves,
+    sqrt(2) for diagonal moves.
+    """
+
+    dr = abs(current[0] - previous[0])
+    dc = abs(current[1] - previous[1])
+
+    if (dr, dc) in ((1, 0), (0, 1)):
+        return cell_size * 1.0
+
+    if (dr, dc) == (1, 1):
+        return cell_size * math.sqrt(2)
+
+    raise ValueError(
+        f"Cells {previous} and {current} are not neighbours."
+    )
+
+
+def path_objective(
+    cost_grid: np.ndarray,
+    path: list[tuple[int, int]],
+    cell_size: float,
+) -> float:
+    """The quantity A* minimises, recomputed from a path.
+
+    Sum over moves of movement_distance x cost(destination cell).
+    The start cell is not charged (A* starts with g = 0).
+    """
+
+    total = 0.0
+
+    for previous, current in zip(path, path[1:]):
+        total += (
+            movement_distance(previous, current, cell_size)
+            * float(cost_grid[current])
+        )
+
+    return total
+
+
 def astar(
     cost_grid: np.ndarray,
     start: tuple[int, int],
@@ -77,6 +124,32 @@ def astar(
     -------
     list[(row, column)] or None
         The route from start to goal.
+    """
+
+    result = astar_search(
+        cost_grid,
+        start,
+        goal,
+        cell_size,
+    )
+
+    if result is None:
+        return None
+
+    return result[0]
+
+
+def astar_search(
+    cost_grid: np.ndarray,
+    start: tuple[int, int],
+    goal: tuple[int, int],
+    cell_size: float = 20.0,
+) -> Optional[tuple[list[tuple[int, int]], float]]:
+    """
+    A* returning (path, objective).
+
+    objective is the accumulated g-score at the goal:
+    sum over moves of movement_distance x cost(destination cell).
     """
 
     rows, cols = cost_grid.shape
@@ -125,9 +198,11 @@ def astar(
         minimum_cost,
     )
 
+    # Entries are (f, g, cell). g is kept so that outdated entries (a cell
+    # pushed again later with a lower g) can be skipped when popped.
     heapq.heappush(
         open_set,
-        (start_h, start),
+        (start_h, 0.0, start),
     )
 
     # Cost from start to each cell
@@ -144,12 +219,18 @@ def astar(
 
     while open_set:
 
-        _, current = heapq.heappop(open_set)
+        _, current_g, current = heapq.heappop(open_set)
+
+        if current_g > g_score[current]:
+            continue
 
         if current == goal:
-            return reconstruct_path(
-                came_from,
-                current,
+            return (
+                reconstruct_path(
+                    came_from,
+                    current,
+                ),
+                g_score[current],
             )
 
         current_row, current_col = current
@@ -181,13 +262,13 @@ def astar(
                 continue
 
             # Physical distance of this movement
-            movement_distance = (
+            movement_distance_m = (
                 cell_size * movement_multiplier
             )
 
             # Traversal cost
             movement_cost = (
-                movement_distance * neighbor_cost
+                movement_distance_m * neighbor_cost
             )
 
             tentative_g = (
@@ -218,7 +299,7 @@ def astar(
 
                 heapq.heappush(
                     open_set,
-                    (f_score, neighbor),
+                    (f_score, tentative_g, neighbor),
                 )
 
     # No route found

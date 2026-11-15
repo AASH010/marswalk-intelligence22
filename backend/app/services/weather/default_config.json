@@ -1,0 +1,268 @@
+{
+  "schema_version": "1.0",
+  "strict_inputs": true,
+  "sentinels": {
+    "missing_tokens": [
+      ""
+    ],
+    "numeric_sentinels": []
+  },
+  "label_unit_symbols": {
+    "kelvin": "K",
+    "meter/second": "m/s",
+    "pascal": "Pa",
+    "degree": "deg",
+    "second": "s",
+    "watt/m2": "W/m2",
+    "amp": "A",
+    "volt": "V",
+    "ohm": "ohm"
+  },
+  "header_aliases": [
+    {
+      "product_type": "WS",
+      "field_number": 16,
+      "header": "BOOM1_ALG_STATE_STABLE",
+      "label_name": "BOOM1_ALG_IN_STABLE_STATE",
+      "note": "CSV header wording differs from label name; same field position; the label description (Boom 1 control algorithm state) matches the header."
+    },
+    {
+      "product_type": "WS",
+      "field_number": 17,
+      "header": "BOOM2_ALG_STATE_STABLE",
+      "label_name": "BOOM2_ALG_IN_STABLE_STATE",
+      "note": "CSV header wording differs from label name; same field position; the label description (Boom 2 control algorithm state) matches the header."
+    },
+    {
+      "product_type": "RHS",
+      "field_number": 13,
+      "header": "THERMOCAP2_TEMP_UNCERTAINTY",
+      "label_name": "THERMOCAP1_TEMP_UNCERTAINTY",
+      "note": "Label defect: field 13 repeats the name of field 11, but its description says 'Thermocap 2 temperature uncertainty', which agrees with the CSV header."
+    }
+  ],
+  "quality_rules": [
+    {
+      "id": "WS_B1_ALG_CHANGING_STATE",
+      "product_type": "WS",
+      "flag_channel": "BOOM1_ALG_IN_STABLE_STATE",
+      "equals": 0,
+      "status": "suspect",
+      "code": "WS_BOOM1_ALG_CHANGING_STATE",
+      "applies_to": [
+        "wind_speed_horizontal_boom1",
+        "wind_direction_boom1"
+      ],
+      "label_basis": "Label: 0 = Boom 1 control algorithm is changing state, 1 = not changing state"
+    },
+    {
+      "id": "WS_B2_ALG_CHANGING_STATE",
+      "product_type": "WS",
+      "flag_channel": "BOOM2_ALG_IN_STABLE_STATE",
+      "equals": 0,
+      "status": "suspect",
+      "code": "WS_BOOM2_ALG_CHANGING_STATE",
+      "applies_to": [
+        "wind_speed_horizontal_boom2",
+        "wind_direction_boom2"
+      ],
+      "label_basis": "Label: 0 = Boom 2 control algorithm is changing state, 1 = not changing state"
+    },
+    {
+      "id": "WS_ROVER_MOVING",
+      "product_type": "WS",
+      "flag_channel": "ROVER_STILL",
+      "equals": 0,
+      "status": "suspect",
+      "code": "WS_ROVER_MOVING",
+      "applies_to": [
+        "wind_speed_horizontal_boom1",
+        "wind_speed_horizontal_boom2",
+        "wind_direction_boom1",
+        "wind_direction_boom2"
+      ],
+      "label_basis": "Label: 0 = Rover is moving, 1 = Rover is motionless"
+    }
+  ],
+  "variables": [
+    {
+      "name": "air_temperature_ats1",
+      "description": "Local air temperature, ATS unit 1 (RSM at 50 deg)",
+      "product_type": "ATS",
+      "channel": "ATS_LOCAL_TEMP1",
+      "label_unit": "kelvin",
+      "canonical_unit": "K",
+      "evidence_patterns": [
+        "air temperature",
+        "RSM at 50"
+      ]
+    },
+    {
+      "name": "air_temperature_ats2",
+      "description": "Local air temperature, ATS unit 2 (RSM at 155 deg)",
+      "product_type": "ATS",
+      "channel": "ATS_LOCAL_TEMP2",
+      "label_unit": "kelvin",
+      "canonical_unit": "K",
+      "evidence_patterns": [
+        "air temperature",
+        "RSM at 155"
+      ]
+    },
+    {
+      "name": "air_temperature_ats3",
+      "description": "Local air temperature, ATS unit 3 (RSM at 290 deg)",
+      "product_type": "ATS",
+      "channel": "ATS_LOCAL_TEMP3",
+      "label_unit": "kelvin",
+      "canonical_unit": "K",
+      "evidence_patterns": [
+        "air temperature",
+        "RSM at 290"
+      ]
+    },
+    {
+      "name": "air_temperature_ats4",
+      "description": "Local air temperature, ATS unit 4 (RFB, port side / pilot)",
+      "product_type": "ATS",
+      "channel": "ATS_LOCAL_TEMP4",
+      "label_unit": "kelvin",
+      "canonical_unit": "K",
+      "evidence_patterns": [
+        "air temperature",
+        "RFB at Port"
+      ]
+    },
+    {
+      "name": "air_temperature_ats5",
+      "description": "Local air temperature, ATS unit 5 (RFB, starboard / co-pilot)",
+      "product_type": "ATS",
+      "channel": "ATS_LOCAL_TEMP5",
+      "label_unit": "kelvin",
+      "canonical_unit": "K",
+      "evidence_patterns": [
+        "air temperature",
+        "RFB at Starboard"
+      ]
+    },
+    {
+      "name": "wind_speed_horizontal_boom1",
+      "description": "Horizontal wind speed, wind sensor boom 1",
+      "product_type": "WS",
+      "channel": "BOOM1_HORIZONTAL_WIND_SPEED",
+      "label_unit": "meter/second",
+      "canonical_unit": "m/s",
+      "evidence_patterns": [
+        "boom 1",
+        "wind horizontal speed"
+      ],
+      "uncertainty_channel": "BOOM1_HORIZONTAL_WIND_SPEED_UNCERTAINTY"
+    },
+    {
+      "name": "wind_direction_boom1",
+      "description": "Wind direction, wind sensor boom 1 (reference frame not stated in the label)",
+      "product_type": "WS",
+      "channel": "BOOM1_WIND_DIRECTION",
+      "label_unit": "degree",
+      "canonical_unit": "deg",
+      "evidence_patterns": [
+        "boom 1",
+        "wind direction"
+      ],
+      "uncertainty_channel": "BOOM1_WIND_DIRECTION_UNCERTAINTY"
+    },
+    {
+      "name": "wind_speed_horizontal_boom2",
+      "description": "Horizontal wind speed, wind sensor boom 2",
+      "product_type": "WS",
+      "channel": "BOOM2_HORIZONTAL_WIND_SPEED",
+      "label_unit": "meter/second",
+      "canonical_unit": "m/s",
+      "evidence_patterns": [
+        "boom 2",
+        "wind horizontal speed"
+      ],
+      "uncertainty_channel": "BOOM2_HORIZONTAL_WIND_SPEED_UNCERTAINTY"
+    },
+    {
+      "name": "wind_direction_boom2",
+      "description": "Wind direction, wind sensor boom 2 (reference frame not stated in the label)",
+      "product_type": "WS",
+      "channel": "BOOM2_WIND_DIRECTION",
+      "label_unit": "degree",
+      "canonical_unit": "deg",
+      "evidence_patterns": [
+        "boom 2",
+        "wind direction"
+      ],
+      "uncertainty_channel": "BOOM2_WIND_DIRECTION_UNCERTAINTY"
+    },
+    {
+      "name": "pressure_barocap1",
+      "description": "Atmospheric pressure, Barocap transducer 1 (type depends on the TRANSDUCER field for Barocap 1)",
+      "product_type": "PS",
+      "channel": "BAROCAP1_PRESSURE",
+      "label_unit": "pascal",
+      "canonical_unit": "Pa",
+      "evidence_patterns": [
+        "pressure"
+      ],
+      "uncertainty_channel": "BAROCAP1_PRESSURE_UNCERTAINTY"
+    },
+    {
+      "name": "pressure_barocap2",
+      "description": "Atmospheric pressure, Barocap transducer 2 (type depends on the TRANSDUCER field for Barocap 1)",
+      "product_type": "PS",
+      "channel": "BAROCAP2_PRESSURE",
+      "label_unit": "pascal",
+      "canonical_unit": "Pa",
+      "evidence_patterns": [
+        "pressure"
+      ],
+      "uncertainty_channel": "BAROCAP2_PRESSURE_UNCERTAINTY"
+    },
+    {
+      "name": "pressure_barocap3",
+      "description": "Atmospheric pressure, Barocap transducer 3 (type depends on the TRANSDUCER field for Barocap 1)",
+      "product_type": "PS",
+      "channel": "BAROCAP3_PRESSURE",
+      "label_unit": "pascal",
+      "canonical_unit": "Pa",
+      "evidence_patterns": [
+        "pressure"
+      ],
+      "uncertainty_channel": "BAROCAP3_PRESSURE_UNCERTAINTY"
+    }
+  ],
+  "weather_intensity": {
+    "method": "weighted_mean_clipped_minmax",
+    "min_components": 1,
+    "components": [
+      {
+        "name": "wind_speed_boom1",
+        "variable": "wind_speed_horizontal_boom1",
+        "weight": 0.25,
+        "norm_min": 0.0,
+        "norm_max": 30.0,
+        "rationale": "Fixed reference range 0-30 m/s (design constant, not computed from the data). Values above are clipped to 1."
+      },
+      {
+        "name": "wind_speed_boom2",
+        "variable": "wind_speed_horizontal_boom2",
+        "weight": 0.25,
+        "norm_min": 0.0,
+        "norm_max": 30.0,
+        "rationale": "Same fixed reference range as boom 1."
+      },
+      {
+        "name": "air_temperature",
+        "variable": "air_temperature_ats1",
+        "weight": 0.5,
+        "norm_min": 150.0,
+        "norm_max": 300.0,
+        "invert": true,
+        "rationale": "Fixed reference range 150-300 K (design constant, not computed from the data). Inverted: colder air -> higher component value, because the EVA weather limits treat low temperature as the hazard (GO needs air and ground temperature above a minimum)."
+      }
+    ]
+  }
+}

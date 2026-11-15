@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -20,8 +21,13 @@ DEM_PATH = (
 MAX_WALKABLE_SLOPE = 20.0
 
 
-def load_terrain():
-    with rasterio.open(DEM_PATH) as src:
+def compute_terrain(dem_path: Path) -> dict:
+    """Read the DEM and derive slope, terrain cost and the blocked mask.
+
+    This is the original per-request computation, unchanged. It is called
+    once per process through load_terrain().
+    """
+    with rasterio.open(dem_path) as src:
         dem = src.read(1)
         resolution = src.res[0]
         nodata = src.nodata
@@ -77,6 +83,35 @@ def load_terrain():
         "transform": transform,
     }
 
+
+@lru_cache(maxsize=2)
+def _load_terrain_cached(dem_path: str) -> dict:
+    terrain = compute_terrain(Path(dem_path))
+
+    # The cached arrays are shared by every request. Make them read-only so
+    # that a caller that tries to modify them in place fails loudly instead
+    # of corrupting the terrain for later requests.
+    for key in ("dem", "slope", "terrain_cost", "blocked_mask"):
+        terrain[key].setflags(write=False)
+
+    return terrain
+
+
+def load_terrain(dem_path: Path | None = None) -> dict:
+    """Terrain for the processed Jezero DEM, computed once per process.
+
+    Same keys and values as before the cache was added. The arrays are
+    read-only; copy them before changing anything. A missing file raises on
+    every call (failures are not cached).
+    """
+    path = Path(dem_path) if dem_path is not None else DEM_PATH
+    return _load_terrain_cached(str(path.resolve()))
+
+
+def clear_terrain_cache() -> None:
+    _load_terrain_cached.cache_clear()
+
+
 def grid_to_map(row, col, transform):
     x, y = rasterio.transform.xy(
         transform,
@@ -86,4 +121,3 @@ def grid_to_map(row, col, transform):
     )
 
     return float(x), float(y)
-
