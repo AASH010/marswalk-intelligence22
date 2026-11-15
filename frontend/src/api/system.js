@@ -4,8 +4,8 @@ import { requestJson } from "./client";
  * Backend health — GET /health returns { status: "healthy" }
  * (backend/app/main.py). Anything else counts as not reachable.
  */
-export async function getHealth({ signal } = {}) {
-  const data = await requestJson("/health", { signal, timeoutMs: 8000 });
+export async function getHealth({ signal, timeoutMs = 8000 } = {}) {
+  const data = await requestJson("/health", { signal, timeoutMs });
   return data?.status === "healthy";
 }
 
