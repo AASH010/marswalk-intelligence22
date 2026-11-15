@@ -12,7 +12,9 @@ import { API_BASE, ApiError, requestJson } from "./client";
 
 export const CTX_TILE_URL = `${API_BASE}/tiles/ctx/{z}/{x}/{y}.png`;
 export const TERRAIN_TEXTURE_URL = `${API_BASE}/api/v1/terrain/texture?v=2`;
-export const HEIGHTMAP_MAX_DIMENSION = 256;
+// Full DEM resolution (500 x 500 at 20 m): every route cell is a terrain
+// vertex, so the 3D route and the 2D overlays use the exact elevation samples.
+export const HEIGHTMAP_MAX_DIMENSION = 500;
 
 const REQUIRED_FIELDS = ["elevation_m", "slope_deg", "valid_mask", "row_indices", "col_indices", "transform"];
 
