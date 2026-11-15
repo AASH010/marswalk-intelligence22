@@ -60,16 +60,13 @@ data/raw/*
 data/interim/*
 !data/interim/.gitkeep
 
-# Processed data
+# Processed data. Everything is ignored except the files the backend serves at
+# runtime (see the allow-list below the "Large scientific / binary files" block).
 data/processed/*
 !data/processed/.gitkeep
 
-# Generated inputs of the weather-aware EVA flow (also covered by the rule
-# above; listed so they stay ignored if that rule is ever narrowed):
-#   processed DEM used by routing
-data/processed/jezero/terrain/
-#   Task 1 MEDA pipeline output (--out-dir): weather_intensity.parquet,
-#   observations.parquet, manifest.json, qa_report.*, variables.json
+# Task 1 MEDA pipeline output (--out-dir): weather_intensity.parquet,
+# observations.parquet, manifest.json, qa_report.*, variables.json
 data/resources/MEDA_Weather_ds/processed/
 
 # Keep only small sample/demo data
@@ -92,6 +89,29 @@ data/resources/MEDA_Weather_ds/processed/
 *.zip
 *.tar
 *.gz
+
+
+# =========================================================
+# Runtime data served by the backend (deployed with the repo)
+# Must stay AFTER the *.tif / *.img rules above: the last matching rule wins.
+# =========================================================
+!data/processed/jezero/
+data/processed/jezero/*
+!data/processed/jezero/jezero_aoi_boundary.geojson
+!data/processed/jezero/map_metadata.json
+!data/processed/jezero/tiles/
+!data/processed/jezero/tiles/**
+!data/processed/jezero/terrain/
+data/processed/jezero/terrain/*
+!data/processed/jezero/terrain/jezero_aoi_ctx_dem_20m.tif
+!data/processed/jezero/terrain/ctx_texture.png
+!data/processed/jezero/science/
+data/processed/jezero/science/*
+!data/processed/jezero/science/crism/
+data/processed/jezero/science/crism/*
+!data/processed/jezero/science/crism/crism_aoi_20m.tif
+!data/processed/jezero/science/crism/crism_dual_band_overlay.png
+!data/processed/jezero/science/crism/metadata.json
 
 
 # =========================================================

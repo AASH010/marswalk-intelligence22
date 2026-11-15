@@ -332,8 +332,24 @@ def build_ctx_texture():
         return memory_file.read()
 
 
+CTX_TEXTURE_PATH = (
+    PROJECT_ROOT
+    / "data"
+    / "processed"
+    / "jezero"
+    / "terrain"
+    / "ctx_texture.png"
+)
+
+
 @lru_cache(maxsize=1)
 def _cached_ctx_texture():
+
+    # Prefer the pre-built 500 x 500 texture that ships with the repo, so the
+    # 360 MB raw CTX mosaic does not have to be deployed. Fall back to building
+    # it from the raw mosaic when the pre-built file is missing.
+    if CTX_TEXTURE_PATH.exists():
+        return CTX_TEXTURE_PATH.read_bytes()
 
     return build_ctx_texture()
 
