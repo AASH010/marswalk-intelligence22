@@ -57,9 +57,13 @@ function MissionPanel({
       </div>
 
       <div className="mw-panel-section__body">
-        <StrategySelector value={strategyId} onChange={onStrategyChange} disabled={isSubmitting} />
+        <div data-tour="strategy">
+          <StrategySelector value={strategyId} onChange={onStrategyChange} disabled={isSubmitting} />
+        </div>
 
-        <PointSummary start={start} goal={goal} activeTool={activeTool} onActivateTool={onActivateTool} onLocate={onLocate} />
+        <div data-tour="points">
+          <PointSummary start={start} goal={goal} activeTool={activeTool} onActivateTool={onActivateTool} onLocate={onLocate} />
+        </div>
 
         {activeTool !== "explore" && (
           <InlineMessage tone="info" compact>
@@ -67,7 +71,7 @@ function MissionPanel({
           </InlineMessage>
         )}
 
-        <div className="mw-plan">
+        <div className="mw-plan" data-tour="plan">
           <Button
             variant="primary"
             block

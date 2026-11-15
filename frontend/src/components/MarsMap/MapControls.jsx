@@ -2,12 +2,28 @@ import { useEffect } from "react";
 import L from "leaflet";
 import { useMap, useMapEvents } from "react-leaflet";
 
-import { CTX_EXTENT, MARS_MAP } from "../../utils/mapConfig";
+import { CTX_EXTENT, MARS_MAP, NAV_PADDING_M } from "../../utils/mapConfig";
 import { extentToLatLngBounds, latLngToMars, marsToLatLng, xyToLatLng } from "../../utils/mapAdapter";
 import { cursorStore } from "../../utils/cursorStore";
 
-export const CTX_BOUNDS = extentToLatLngBounds(CTX_EXTENT);
 export const AOI_BOUNDS = extentToLatLngBounds(MARS_MAP.bounds);
+
+/** Pan limit: the AOI plus the same margin on every side, never past the CTX mosaic. */
+export const NAV_BOUNDS = extentToLatLngBounds({
+  minX: Math.max(CTX_EXTENT.minX, MARS_MAP.bounds.minX - NAV_PADDING_M),
+  maxX: Math.min(CTX_EXTENT.maxX, MARS_MAP.bounds.maxX + NAV_PADDING_M),
+  minY: Math.max(CTX_EXTENT.minY, MARS_MAP.bounds.minY - NAV_PADDING_M),
+  maxY: Math.min(CTX_EXTENT.maxY, MARS_MAP.bounds.maxY + NAV_PADDING_M),
+});
+
+/** Smallest zoom at which the navigable area still fills the view, so the user cannot zoom out into empty space. */
+function syncMinZoom(map) {
+  const size = map.getSize();
+  if (size.x <= 0 || size.y <= 0) return;
+  const minZoom = map.getBoundsZoom(L.latLngBounds(NAV_BOUNDS), true);
+  map.setMinZoom(minZoom);
+  if (map.getZoom() < minZoom) map.setZoom(minZoom, { animate: false });
+}
 
 const prefersReducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -19,14 +35,14 @@ export function MapClickHandler({ onMapClick }) {
 }
 
 /**
- * Initial viewport. The whole CTX mosaic stays reachable (it sets the minimum
- * zoom, as before), and the view opens on the operational AOI where routing
- * and science data exist.
+ * Initial viewport. Navigation is limited to the AOI plus an equal margin on
+ * every side (see NAV_BOUNDS), and the view opens on the operational AOI where
+ * routing and science data exist.
  */
 export function InitialView({ onReady }) {
   const map = useMap();
   useEffect(() => {
-    map.setMinZoom(map.getBoundsZoom(L.latLngBounds(CTX_BOUNDS), false));
+    syncMinZoom(map);
     map.fitBounds(AOI_BOUNDS, { padding: [40, 40], animate: false });
     onReady?.();
     // Run once per map instance.
@@ -51,6 +67,7 @@ export function MapResizeHandler() {
       frame = requestAnimationFrame(() => {
         if (container.clientWidth > 0 && container.clientHeight > 0) {
           map.invalidateSize({ animate: false });
+          syncMinZoom(map);
         }
       });
     });

@@ -1,4 +1,4 @@
-import { Box, Map as MapIcon, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Box, CircleHelp, CloudSun, Map as MapIcon, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import IconButton from "../ui/IconButton";
 import Logo from "../ui/Logo";
@@ -29,6 +29,9 @@ function HUD({
   rightOpen,
   onToggleLeft,
   onToggleRight,
+  onOpenWeather,
+  onOpenTour,
+  weatherBadge = null,
 }) {
   const service = SERVICE_BADGES[serviceStatus] || SERVICE_BADGES.checking;
 
@@ -59,7 +62,7 @@ function HUD({
         </div>
       </div>
 
-      <nav className="mw-view-tabs" aria-label="Map view">
+      <nav className="mw-view-tabs" aria-label="Map view" data-tour="view-tabs">
         {VIEWS.map((view) => {
           const Icon = view.icon;
           const active = viewMode === view.id;
@@ -80,10 +83,22 @@ function HUD({
       </nav>
 
       <div className="mw-header__end">
+        <button type="button" className="mw-header__weather" onClick={onOpenWeather} data-tour="weather-button">
+          <CloudSun size={16} aria-hidden="true" />
+          <span>Weather</span>
+          {weatherBadge?.windows && (
+            <span className="mw-header__weather-meta mw-mono">
+              {weatherBadge.windows.length ? `${weatherBadge.windows.reduce((sum, w) => sum + w.length_hours, 0)} h GO` : "no GO"}
+            </span>
+          )}
+        </button>
         <div className="mw-header__badges">
           <StatusBadge status={service.status} tone={service.tone} label={service.label} className="mw-header__service" />
           <StatusBadge status={routeStatus} label={routeBadgeLabel} />
         </div>
+        <IconButton label="Guided tour" onClick={onOpenTour} data-tour="help">
+          <CircleHelp size={18} aria-hidden="true" />
+        </IconButton>
         <IconButton
           label={rightOpen ? "Collapse Mission Inspector" : "Expand Mission Inspector"}
           onClick={onToggleRight}

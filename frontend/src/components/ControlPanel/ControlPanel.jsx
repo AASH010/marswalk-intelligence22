@@ -29,7 +29,7 @@ function ControlPanel({ layers, availability, rasters, scienceCount, onToggleLay
   const unavailable = LAYER_DEFINITIONS.filter((layer) => availability[layer.id] === AVAILABILITY.UNAVAILABLE);
 
   return (
-    <section className="mw-panel-section" aria-labelledby="mw-layer-manager">
+    <section className="mw-panel-section" aria-labelledby="mw-layer-manager" data-tour="layers">
       <div className="mw-panel-section__head">
         <h2 className="mw-panel-section__title" id="mw-layer-manager">
           <Layers size={15} aria-hidden="true" />

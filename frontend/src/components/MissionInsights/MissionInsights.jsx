@@ -1,4 +1,4 @@
-import { Atom, Backpack, ClipboardList, Database, Scale, Target } from "lucide-react";
+import { Atom, Backpack, CalendarClock, ClipboardList, Clock, CloudSun, Database, Scale, Target } from "lucide-react";
 
 import Accordion from "../ui/Accordion";
 import EvaSection from "./EvaSection";
@@ -8,6 +8,9 @@ import RouteSummary from "./RouteSummary";
 import ScienceSection from "./ScienceSection";
 import TargetDetails from "./TargetDetails";
 import StatusBadge from "../ui/StatusBadge";
+import WeatherNowSection from "../Weather/WeatherNowSection";
+import MissionClock from "../Weather/MissionClock";
+import EvaForecastSection from "../Weather/EvaForecastSection";
 import { ROUTE_STATUS } from "../../utils/routeStatus";
 
 /**
@@ -39,6 +42,7 @@ function MissionInsights({
   evaError,
   evaInputs,
   onEvaInputsChange,
+  weather,
 }) {
   const stale = routeStatus === ROUTE_STATUS.OUTDATED;
   const hasRoute = Boolean(routeResult);
@@ -54,6 +58,71 @@ function MissionInsights({
       >
         <RouteSummary status={routeStatus} result={routeResult} error={routeError} isSubmitting={isSubmitting} />
       </Accordion>
+
+      {weather && (
+        <>
+          {weather.clock && weather.latestSol != null && (
+            <Accordion
+              title="Mission clock"
+              icon={<Clock size={15} aria-hidden="true" />}
+              meta={weather.clockSol != null ? <span className="mw-mono">Sol {weather.clockSol}</span> : null}
+              defaultOpen
+            >
+              <MissionClock
+                clock={weather.clock}
+                latestSol={weather.latestSol}
+                firstSol={weather.firstClockSol}
+                now={weather.nowHour}
+                nowLoading={weather.nowLoading}
+                onGoLive={weather.onGoLive}
+              />
+            </Accordion>
+          )}
+
+          <Accordion
+            title="Surface weather now"
+            icon={<CloudSun size={15} aria-hidden="true" />}
+            meta={weather.current ? <span className="mw-mono">{weather.measured ? "Measured" : "Estimate"}</span> : null}
+            defaultOpen
+          >
+            <WeatherNowSection
+              current={weather.current}
+              loading={weather.currentLoading}
+              error={weather.currentError}
+              onRetry={weather.onRetry}
+              measured={weather.measured}
+              clockSol={weather.clockSol}
+              estimate={weather.nowHour}
+            />
+          </Accordion>
+
+          <Accordion
+            title="EVA weather window"
+            icon={<CalendarClock size={15} aria-hidden="true" />}
+            meta={
+              weather.forecast?.recommended_departure ? (
+                <StatusBadge status="calculated" label="Window found" />
+              ) : weather.route?.state === "current" && weather.forecast ? (
+                <StatusBadge status="outdated" label="No window" />
+              ) : null
+            }
+            defaultOpen
+          >
+            <EvaForecastSection
+              forecast={weather.forecast}
+              loading={weather.forecastLoading}
+              error={weather.forecastError}
+              onRetry={weather.onRetry}
+              horizon={weather.horizon}
+              onHorizonChange={weather.onHorizonChange}
+              issueSol={weather.issueSol}
+              route={weather.route}
+              onOpenDashboard={weather.onOpenDashboard}
+              onFitHorizon={weather.onFitHorizon}
+            />
+          </Accordion>
+        </>
+      )}
 
       <Accordion title="Strategy comparison" icon={<Scale size={15} aria-hidden="true" />} defaultOpen={false}>
         <RouteComparison

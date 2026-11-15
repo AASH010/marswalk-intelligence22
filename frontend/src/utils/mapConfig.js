@@ -27,6 +27,14 @@ export const MARS_MAP = {
   },
 };
 
+/**
+ * How far past the AOI edge the user can pan, in metres, equal on all four
+ * sides. The AOI sits near the western edge of the CTX mosaic, so limiting the
+ * view to the whole mosaic left ~21 km on the left and ~58 km on the right.
+ * Navigation is limited to a square centred on the AOI instead.
+ */
+export const NAV_PADDING_M = 15000;
+
 /** Full CTX orthomosaic extent in Mars projected metres. */
 export const CTX_EXTENT = {
   minX: 4329192.1081,
